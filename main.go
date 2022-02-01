@@ -1,19 +1,20 @@
 package main
 
 import (
-	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
 
 func check(a ...interface{}) {
-	for _, a := range a {
-		if err, ok := a.(error); ok && err != nil {
+	for _, v := range a {
+		if err, ok := v.(error); ok && err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -31,14 +32,37 @@ func mustOutput(name string, arg ...string) []byte {
 	return b
 }
 
-var wg sync.WaitGroup
+var (
+	maxDepth int
 
-func printImports(base, target string) {
-	var Data struct {
-		Imports []string
+	wg sync.WaitGroup
+
+	waitlist = make(chan struct{}, runtime.NumCPU())
+
+	m       sync.Mutex
+	visited = map[string]struct{}{}
+)
+
+func printImports(depth int, base, target string) {
+	defer wg.Done()
+
+	if maxDepth > 0 && depth > maxDepth {
+		return
 	}
-	json.Unmarshal(mustOutput("go", "list", "-json", target), &Data)
-	for _, pkg := range Data.Imports {
+
+	m.Lock()
+	if _, ok := visited[target]; ok {
+		m.Unlock()
+		return
+	}
+	visited[target] = struct{}{}
+	m.Unlock()
+
+	waitlist <- struct{}{}
+	defer func() { <-waitlist }()
+
+	imports := strings.Split(string(mustOutput("go", "list", "-f", `{{join .Imports "\n"}}`, target)), "\n")
+	for _, pkg := range imports {
 		if !strings.HasPrefix(pkg, base) { // ignore external imports
 			continue
 		}
@@ -48,27 +72,25 @@ func printImports(base, target string) {
 		check(err)
 		fmt.Printf(`	"%s" -> "%s"`+"\n", relTarget, relPkg)
 		wg.Add(1)
-		go printImports(base, pkg)
+		go printImports(depth+1, base, pkg)
 	}
-	wg.Done()
 }
 
 func main() {
-	if len(os.Args) > 1 {
-		check(os.Chdir(os.Args[1]))
+	flag.IntVar(&maxDepth, "depth", 0, "max depth, 0 means no limit")
+	flag.Parse()
+	if flag.NArg() > 0 {
+		check(os.Chdir(flag.Arg(0)))
 	}
-	var Data struct {
-		ImportPath string
-		Module     struct {
-			Path string
-		}
-	}
-	check(json.Unmarshal(mustOutput("go", "list", "-json"), &Data))
+	fields := strings.Fields(string(mustOutput("go", "list", "-f", `{{.Module.Path}} {{.ImportPath}}`)))
+	base := fields[0]
+	target := fields[1]
+
 	fmt.Println("digraph {")
-	base := Data.Module.Path
-	target := Data.ImportPath
+	fmt.Println("	rankdir=LR")
+	fmt.Println("	node [shape=box]")
 	wg.Add(1)
-	printImports(base, target)
+	go printImports(1, base, target)
 	wg.Wait()
 	fmt.Println("}")
 }
