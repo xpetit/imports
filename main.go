@@ -20,7 +20,7 @@ func check(a ...interface{}) {
 	}
 }
 
-func mustOutput(name string, arg ...string) []byte {
+func mustOutput(name string, arg ...string) string {
 	b, err := exec.Command(name, arg...).CombinedOutput()
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); ok {
@@ -29,7 +29,7 @@ func mustOutput(name string, arg ...string) []byte {
 			log.Fatal(err)
 		}
 	}
-	return b
+	return string(b)
 }
 
 var (
@@ -61,7 +61,7 @@ func printImports(depth int, base, target string) {
 	waitlist <- struct{}{}
 	defer func() { <-waitlist }()
 
-	imports := strings.Split(string(mustOutput("go", "list", "-f", `{{join .Imports "\n"}}`, target)), "\n")
+	imports := strings.Split(mustOutput("go", "list", "-f", `{{join .Imports "\n"}}`, target), "\n")
 	for _, pkg := range imports {
 		if !strings.HasPrefix(pkg, base) { // ignore external imports
 			continue
@@ -82,7 +82,7 @@ func main() {
 	if flag.NArg() > 0 {
 		check(os.Chdir(flag.Arg(0)))
 	}
-	fields := strings.Fields(string(mustOutput("go", "list", "-f", `{{.Module.Path}} {{.ImportPath}}`)))
+	fields := strings.Fields(mustOutput("go", "list", "-f", `{{.Module.Path}} {{.ImportPath}}`))
 	base := fields[0]
 	target := fields[1]
 
