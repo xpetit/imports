@@ -82,6 +82,7 @@ func main() {
 	if flag.NArg() > 0 {
 		check(os.Chdir(flag.Arg(0)))
 	}
+
 	fields := strings.Fields(mustOutput("go", "list", "-f", `{{.Module.Path}} {{.ImportPath}}`))
 	base := fields[0]
 	target := fields[1]

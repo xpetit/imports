@@ -20,7 +20,7 @@ cd litestream
 ### Generate graph
 
 ```
-go list ./cmd/litestream
+go mod download
 go run github.com/xpetit/imports@latest ./cmd/litestream > litestream.gv
 dot -O -Tsvg litestream.gv
 ```
@@ -35,7 +35,7 @@ You can limit the depth for projects with bigger import graphs:
 ```
 git clone https://github.com/caddyserver/caddy.git
 cd caddy
-go list ./cmd/caddy
+go mod download
 go run github.com/xpetit/imports@latest -depth 2 ./cmd/caddy > caddy.gv
 dot -O -Tsvg caddy.gv
 ```
